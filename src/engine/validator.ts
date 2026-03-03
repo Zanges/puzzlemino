@@ -28,3 +28,47 @@ export function canPlacePiece(board: BoardState, piece: PieceVariant, startX: nu
 
     return true;
 }
+
+/**
+ * Find the closest valid placement to the given coordinates.
+ * Searches in expanding Manhattan distance rings around (startX, startY).
+ * Returns the nearest valid position, or null if none within maxNudge distance.
+ */
+export function nudgePlacement(
+    board: BoardState,
+    piece: PieceVariant,
+    startX: number,
+    startY: number,
+    maxNudge: number = 3
+): { x: number; y: number } | null {
+    // If it already fits, return as-is
+    if (canPlacePiece(board, piece, startX, startY)) {
+        return { x: startX, y: startY };
+    }
+
+    // Search in expanding rings by Manhattan distance
+    for (let dist = 1; dist <= maxNudge; dist++) {
+        let best: { x: number; y: number; d: number } | null = null;
+
+        for (let dy = -dist; dy <= dist; dy++) {
+            const remainX = dist - Math.abs(dy);
+            for (const dx of remainX === 0 ? [0] : [-remainX, remainX]) {
+                const nx = startX + dx;
+                const ny = startY + dy;
+                if (canPlacePiece(board, piece, nx, ny)) {
+                    // Prefer the candidate closest by Euclidean distance
+                    const d = dx * dx + dy * dy;
+                    if (!best || d < best.d) {
+                        best = { x: nx, y: ny, d };
+                    }
+                }
+            }
+        }
+
+        if (best) {
+            return { x: best.x, y: best.y };
+        }
+    }
+
+    return null;
+}

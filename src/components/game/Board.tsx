@@ -2,7 +2,7 @@ import React from 'react';
 import { useDroppable } from '@dnd-kit/core';
 import { useGameStore } from '../../store/gameStore';
 import { cn } from '../../lib/utils';
-import { canPlacePiece } from '../../engine/validator';
+import { nudgePlacement } from '../../engine/validator';
 import type { PieceVariant } from '../../types/game';
 
 interface BoardProps {
@@ -15,7 +15,7 @@ export const Board: React.FC<BoardProps> = ({ activePiece }) => {
     const board = useGameStore(state => state.board);
     const { over } = useDndContext();
 
-    // Determine the current hovered coordinates from dnd-kit context
+    // Determine the current hovered coordinates, centering the piece on the cursor
     let hoveredX: number | null = null;
     let hoveredY: number | null = null;
     let isValidHover = false;
@@ -23,16 +23,41 @@ export const Board: React.FC<BoardProps> = ({ activePiece }) => {
     if (over && activePiece) {
         const cellData = over.data.current as { x: number, y: number };
         if (cellData) {
-            hoveredX = cellData.x;
-            hoveredY = cellData.y;
-            isValidHover = canPlacePiece(board, activePiece, hoveredX, hoveredY);
+            // Compute the center of filled cells in the piece matrix
+            const matrix = activePiece.matrix;
+            let sumX = 0, sumY = 0, count = 0;
+            for (let py = 0; py < matrix.length; py++) {
+                for (let px = 0; px < matrix[py].length; px++) {
+                    if (matrix[py][px] === 1) {
+                        sumX += px;
+                        sumY += py;
+                        count++;
+                    }
+                }
+            }
+            // Offset so the piece center aligns with the hovered cell
+            const offsetX = Math.round(sumX / count);
+            const offsetY = Math.round(sumY / count);
+            const anchorX = cellData.x - offsetX;
+            const anchorY = cellData.y - offsetY;
+
+            const nudged = nudgePlacement(board, activePiece, anchorX, anchorY);
+            if (nudged) {
+                hoveredX = nudged.x;
+                hoveredY = nudged.y;
+                isValidHover = true;
+            } else {
+                hoveredX = anchorX;
+                hoveredY = anchorY;
+                isValidHover = false;
+            }
         }
     }
 
     return (
-        <div className="bg-slate-800 p-2 md:p-3 rounded-lg shadow-xl inline-block touch-none select-none">
+        <div className="bg-slate-800 p-[2px] md:p-3 rounded-lg shadow-xl inline-block touch-none select-none">
             <div
-                className="grid gap-[2px] md:gap-1 bg-slate-700/50 p-1 md:p-2 rounded-md"
+                className="grid gap-[1px] md:gap-1 bg-slate-700/50 p-[2px] md:p-2 rounded-md"
                 style={{
                     gridTemplateRows: `repeat(${board.length}, minmax(0, 1fr))`,
                     gridTemplateColumns: `repeat(${board[0]?.length || 0}, minmax(0, 1fr))`
@@ -104,13 +129,14 @@ const BoardCell: React.FC<BoardCellProps> = ({
     return (
         <div
             ref={setNodeRef}
+            style={{ width: 'var(--cell-size)', height: 'var(--cell-size)' }}
             className={cn(
-                "w-6 h-6 sm:w-8 sm:h-8 md:w-10 md:h-10 rounded-sm transition-all duration-150 relative",
+                "rounded-sm",
                 isEmpty && !isPreview && !isInvalidPreview ? "bg-slate-700/40 border border-slate-600/30" : "",
                 !isEmpty ? colorId : "",
                 !isEmpty ? "shadow-sm border border-black/10" : "",
-                isPreview ? `${previewColor} opacity-50 shadow-md ring-2 ring-white/70 scale-95` : "",
-                isInvalidPreview ? "bg-red-500/80 shadow-inner" : ""
+                isPreview ? `${previewColor} opacity-50 border-2 border-white/70` : "",
+                isInvalidPreview ? "bg-red-500/80" : ""
             )}
         />
     );

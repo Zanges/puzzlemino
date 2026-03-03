@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { generateAllVariants, rotateMatrix, serializeMatrix } from './pieceUtils';
 import configData from '../../public/gameConfig.json';
-import type { GameConfig } from '../config/configLoader';
+import type { MasterGameConfig } from '../config/configLoader';
 
 describe('pieceUtils', () => {
     it('rotates a matrix 90 degrees clockwise', () => {
@@ -31,8 +31,8 @@ describe('pieceUtils', () => {
 
     it('generates exactly 19 unique matrices from the 7 base Tetrominoes', () => {
         // Read the actual config file
-        // Read the actual config file
-        const config: GameConfig = configData;
+        const masterConfig: MasterGameConfig = configData;
+        const config = masterConfig.difficulties['normal'];
 
         const variants = generateAllVariants(config.pieces);
 

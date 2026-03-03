@@ -8,11 +8,13 @@ export const Hand: React.FC = () => {
     const hand = useGameStore(state => state.hand);
 
     return (
-        <div className="flex flex-row md:flex-col landscape:flex-col gap-4 mt-6 md:mt-0 landscape:mt-0 md:ml-8 landscape:ml-8 p-4 bg-slate-800 rounded-lg shadow-xl w-full md:w-auto overflow-x-auto md:overflow-visible landscape:overflow-visible items-center md:items-start landscape:items-start min-h-[120px] md:min-h-[400px] landscape:min-h-[400px]">
-            {hand.map((piece, index) => (
-                <div key={piece?.id || index} className="flex-1 flex items-center justify-center min-w-[80px] min-h-[80px] bg-slate-700/30 rounded-md border border-slate-600/30 p-2">
-                    {piece && <DraggablePiece piece={piece} />}
+        <div className="flex flex-row md:flex-col landscape:flex-col gap-2 md:gap-4 mt-2 md:mt-0 landscape:mt-0 md:ml-4 landscape:ml-4 p-2 md:p-4 bg-slate-800 rounded-lg shadow-xl w-full md:w-auto overflow-x-auto md:overflow-visible landscape:overflow-visible items-center justify-center md:items-start landscape:items-start">
+            {hand.map((piece, index) => piece ? (
+                <div key={piece.id} className="flex items-center justify-center bg-slate-700/30 rounded-md border border-slate-600/30 p-1 md:p-2">
+                    <DraggablePiece piece={piece} />
                 </div>
+            ) : (
+                <div key={`empty-${index}`} className="flex items-center justify-center bg-slate-700/30 rounded-md border border-slate-600/30 p-1 md:p-2" style={{ width: 'var(--cell-size)', height: 'var(--cell-size)' }} />
             ))}
         </div>
     );

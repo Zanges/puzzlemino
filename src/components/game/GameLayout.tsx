@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import {
     DndContext,
     DragOverlay,
@@ -6,7 +6,6 @@ import {
     useSensors,
     MouseSensor,
     TouchSensor,
-    defaultDropAnimationSideEffects
 } from '@dnd-kit/core';
 import type { DragStartEvent, DragEndEvent, Modifier } from '@dnd-kit/core';
 import { restrictToWindowEdges } from '@dnd-kit/modifiers';
@@ -17,9 +16,56 @@ import { Hand } from './Hand';
 import { Piece } from './Piece';
 import type { PieceVariant } from '../../types/game';
 
+function useViewportSize() {
+    const [size, setSize] = useState({ w: window.innerWidth, h: window.innerHeight });
+    useEffect(() => {
+        const onResize = () => setSize({ w: window.innerWidth, h: window.innerHeight });
+        window.addEventListener('resize', onResize);
+        return () => window.removeEventListener('resize', onResize);
+    }, []);
+    return size;
+}
+
+// Set to true to show the floating piece following the cursor while dragging
+const showDragOverlay = false;
+
 export const GameLayout: React.FC = () => {
     const { initializeGame, configLoaded, isGameOver, tryPlacePiece, score, returnToMenu } = useGameStore();
+    const board = useGameStore(state => state.board);
+    const viewport = useViewportSize();
+
+    const isLandscape = viewport.w > viewport.h;
+
+    const cellSize = useMemo(() => {
+        const rows = board.length || 10;
+        const cols = board[0]?.length || 10;
+        const gap = 1; // gap in px between cells
+        // Board chrome: 2px outer padding + 2px inner padding per side = 8px total per axis
+        const boardChrome = 8;
+        // Score bar height
+        const scoreH = 32;
+
+        let size: number;
+        if (isLandscape) {
+            const availableH = viewport.h - scoreH - boardChrome - 28;
+            const availableW = viewport.w * 0.65 - boardChrome;
+            size = Math.min(availableH / rows, availableW / cols);
+        } else {
+            const availableW = viewport.w - boardChrome;
+            // Reserve space for hand (tallest piece is 4 cells × ~28px + chrome)
+            const handH = 140;
+            const availableH = viewport.h - scoreH - boardChrome - handH;
+            size = Math.min(availableW / cols, availableH / rows);
+        }
+
+        // Account for gaps between cells
+        size = size - gap;
+
+        // Clamp between reasonable bounds
+        return Math.max(16, Math.min(size, 48));
+    }, [board, viewport, isLandscape]);
     const [activePiece, setActivePiece] = useState<PieceVariant | null>(null);
+    const isTouchDrag = useRef(false);
 
     // Initialize the game once
     useEffect(() => {
@@ -31,26 +77,17 @@ export const GameLayout: React.FC = () => {
     // Setup drag sensors. 
     // MouseSensor for desktop. TouchSensor with delay for mobile (prevent accidental grabs when scrolling... though we disabled scrolling).
     const sensors = useSensors(
-        // MouseSensor for desktop.
         useSensor(MouseSensor, {
-            // Require a slight movement before dragging starts to allow clicks to pass through if needed
-            activationConstraint: {
-                distance: 5, // 5px movement required
-            },
+            activationConstraint: { distance: 3 },
         }),
-        // TouchSensor for mobile.
         useSensor(TouchSensor, {
-            // Delay zero or very small, but require significant movement tolerance or just rely on delay.
-            // For puzzlemino, we want instant grab on touch. So zero delay, but require a 5px drag.
-            activationConstraint: {
-                delay: 0,
-                tolerance: 5,
-            },
+            activationConstraint: { delay: 0, tolerance: 3 },
         })
     );
 
     const handleDragStart = (event: DragStartEvent) => {
         const { active } = event;
+        isTouchDrag.current = event.activatorEvent?.type === 'touchstart';
         const piece = active.data.current?.piece as PieceVariant;
         if (piece) {
             setActivePiece(piece);
@@ -61,19 +98,24 @@ export const GameLayout: React.FC = () => {
         const { over } = event;
 
         if (over && activePiece) {
-            // We dropped over a valid BoardCell drop target
             const cellData = over.data.current as { x: number, y: number };
 
             if (cellData) {
-                // Attempt to place in store
-                tryPlacePiece(activePiece.id, cellData.x, cellData.y);
+                // Center-align: offset by the piece's center of mass
+                const matrix = activePiece.matrix;
+                let sumX = 0, sumY = 0, count = 0;
+                for (let py = 0; py < matrix.length; py++) {
+                    for (let px = 0; px < matrix[py].length; px++) {
+                        if (matrix[py][px] === 1) { sumX += px; sumY += py; count++; }
+                    }
+                }
+                const anchorX = cellData.x - Math.round(sumX / count);
+                const anchorY = cellData.y - Math.round(sumY / count);
 
-                // If it failed, it will just snap back (handled by dnd-kit default behavior)
-                // If it succeeded, React state (board/hand) updates immediately.
+                tryPlacePiece(activePiece.id, anchorX, anchorY);
             }
         }
 
-        // Always clear active piece on end (success or fail)
         setActivePiece(null);
     };
 
@@ -81,44 +123,31 @@ export const GameLayout: React.FC = () => {
         setActivePiece(null);
     };
 
-    const dropAnimation = {
-        sideEffects: defaultDropAnimationSideEffects({
-            styles: {
-                active: {
-                    opacity: '0.4',
-                },
-            },
-        }),
-    };
+    // Disable drop animation for instant feedback
+    const dropAnimation = null;
 
     if (!configLoaded) {
         return <div className="text-white text-center p-8">Loading Game Engine...</div>;
     }
 
-    // Custom modifier to push the dragged piece above the finger on touch devices
-    const touchOffsetModifier: Modifier = ({ windowRect, transform, active }) => {
-        if (!active || !windowRect) {
-            return transform;
+    // Offset the dragged piece away from the cursor/finger so it's fully visible
+    const dragOffsetModifier: Modifier = ({ transform, active }) => {
+        if (!active) return transform;
+
+        if (isTouchDrag.current) {
+            // Large offset for touch so the piece is well above the finger/thumb
+            return {
+                ...transform,
+                x: transform.x,
+                y: transform.y - 120,
+            };
         }
 
-        // We only want to apply the offset if the user is using a touch screen.
-        // dnd-kit tracks the active sensor. If it's a touch sensor, we apply the offset.
-        // We can inspect active.rect to see if the drag was initiated, but the easiest proxy
-        // without dipping into internal dnd-kit state too heavily is to check if the browser supports touch
-        // AND if the user is currently touching (or we can just apply a blanket offset since mobile is the primary issue).
-
-        // Actually, dnd-kit provides `active.data.current`. We could inject sensor type there, 
-        // but an easier approach for responsive UI is using window metrics or standard touch detection.
-        // Given we don't know the exact active sensor inside the modifier cleanly, 
-        // let's check standard navigator maxTouchPoints as a simple heuristic for "is this a mobile/tablet device".
-        // A slightly better way is setting a state flag `isTouchDrag` during `onDragStart` if we could detect it,
-        // but for Puzzlemino, a negative Y offset is actually fine for mouse *and* touch.
-        // It provides a "picked up" feel. Let's apply a universal lift, but make it pronounced enough for thumbs.
-
+        // Small offset for mouse — subtle "picked up" feel
         return {
             ...transform,
-            x: transform.x - 20, // Shift slightly left of cursor/thumb
-            y: transform.y - 60, // Shift significantly above cursor/thumb
+            x: transform.x,
+            y: transform.y - 20,
         };
     };
 
@@ -129,15 +158,15 @@ export const GameLayout: React.FC = () => {
             onDragEnd={handleDragEnd}
             onDragCancel={handleDragCancel}
         >
-            <div className="flex flex-col items-center justify-center min-h-screen bg-slate-900 text-slate-100 p-4 font-sans select-none overflow-hidden">
-                <header className="mb-8 text-center flex flex-col gap-2">
-                    <h1 className="text-4xl md:text-5xl font-bold tracking-tight text-white drop-shadow-sm">Puzzlemino</h1>
-                    <div className="text-xl md:text-2xl font-semibold text-slate-300">
-                        Score: <span className="text-white bg-slate-800 px-3 py-1 rounded-md">{score}</span>
-                    </div>
-                </header>
+            <div
+                className="flex flex-col items-center justify-start h-[100dvh] bg-slate-900 text-slate-100 font-sans select-none overflow-hidden"
+                style={{ '--cell-size': `${cellSize}px` } as React.CSSProperties}
+            >
+                <div className="py-1 text-lg md:text-2xl font-semibold text-slate-300">
+                    Score: <span className="text-white bg-slate-800 px-3 py-1 rounded-md">{score}</span>
+                </div>
 
-                <main className="flex flex-col landscape:flex-row md:flex-row items-center md:items-start justify-center max-w-5xl w-full perspective-1000">
+                <main className="flex flex-col landscape:flex-row md:flex-row items-center md:items-start justify-start landscape:justify-center md:justify-center w-full flex-1 perspective-1000">
                     <div className="relative">
                         <Board activePiece={activePiece} />
 
@@ -166,14 +195,16 @@ export const GameLayout: React.FC = () => {
                     <Hand />
                 </main>
 
-                {/* The flying piece that follows the cursor */}
-                <DragOverlay dropAnimation={dropAnimation} modifiers={[restrictToWindowEdges, touchOffsetModifier]}>
-                    {activePiece ? (
-                        <div className="pointer-events-none drop-shadow-2xl">
-                            <Piece piece={activePiece} isDragging={true} />
-                        </div>
-                    ) : null}
-                </DragOverlay>
+                {/* Floating piece overlay — hidden by default, board preview is shown instead */}
+                {showDragOverlay && (
+                    <DragOverlay dropAnimation={dropAnimation} modifiers={[restrictToWindowEdges, dragOffsetModifier]}>
+                        {activePiece ? (
+                            <div className="pointer-events-none drop-shadow-2xl">
+                                <Piece piece={activePiece} isDragging={true} />
+                            </div>
+                        ) : null}
+                    </DragOverlay>
+                )}
             </div>
         </DndContext>
     );

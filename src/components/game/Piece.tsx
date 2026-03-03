@@ -16,7 +16,7 @@ export const Piece: React.FC<PieceProps> = ({ piece, className, isDragging }) =>
     return (
         <div
             className={cn(
-                "inline-grid gap-1 pointer-events-none", // pointer-events-none so it doesn't block drag events
+                "inline-grid gap-[1px] md:gap-1 pointer-events-none", // pointer-events-none so it doesn't block drag events
                 isDragging && "opacity-80 scale-105 transition-transform duration-200",
                 className
             )}
@@ -29,8 +29,9 @@ export const Piece: React.FC<PieceProps> = ({ piece, className, isDragging }) =>
                 row.map((val, x) => (
                     <div
                         key={`${y}-${x}`}
+                        style={{ width: 'var(--cell-size)', height: 'var(--cell-size)' }}
                         className={cn(
-                            "w-6 h-6 sm:w-8 sm:h-8 md:w-10 md:h-10 rounded-sm",
+                            "rounded-sm",
                             val === 1 ? `${colorId} shadow-sm border border-black/10` : "bg-transparent"
                         )}
                     />

@@ -4,7 +4,7 @@ import { createEmptyBoard, placePieceOnBoard, generateStartingSquares } from '..
 import { createBag, drawPiece } from '../engine/bagStore';
 import { clearLines } from '../engine/lines';
 import { isGameOver } from '../engine/gameOver';
-import { canPlacePiece } from '../engine/validator';
+import { nudgePlacement } from '../engine/validator';
 import { loadGameConfig } from '../config/configLoader';
 import { generateAllVariants } from '../utils/pieceUtils';
 import type { PieceVariantDef } from '../utils/pieceUtils';
@@ -107,13 +107,14 @@ export const useGameStore = create<GameStore>((set, get) => ({
         const piece = state.hand[pieceIndex];
         if (!piece) return false;
 
-        // 1. Validate
-        if (!canPlacePiece(state.board, piece, startX, startY)) {
+        // 1. Validate — nudge inward if slightly out of bounds
+        const nudged = nudgePlacement(state.board, piece, startX, startY);
+        if (!nudged) {
             return false;
         }
 
-        // 2. Place
-        let nextBoard = placePieceOnBoard(state.board, piece, startX, startY);
+        // 2. Place at the (possibly nudged) position
+        let nextBoard = placePieceOnBoard(state.board, piece, nudged.x, nudged.y);
 
         // 3. Score (Base blocks)
         let blocksPlaced = 0;
