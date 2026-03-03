@@ -15,6 +15,7 @@ import { Board } from './Board';
 import { Hand } from './Hand';
 import { Piece } from './Piece';
 import type { PieceVariant } from '../../types/game';
+import { isHighScore, addHighScore } from '../../db/highScores';
 
 function useViewportSize() {
     const [size, setSize] = useState({ w: window.innerWidth, h: window.innerHeight });
@@ -27,7 +28,7 @@ function useViewportSize() {
 }
 
 export const GameLayout: React.FC = () => {
-    const { initializeGame, configLoaded, isGameOver, tryPlacePiece, score, returnToMenu } = useGameStore();
+    const { initializeGame, configLoaded, isGameOver, tryPlacePiece, score, returnToMenu, difficulty } = useGameStore();
     const board = useGameStore(state => state.board);
     const viewport = useViewportSize();
 
@@ -65,6 +66,8 @@ export const GameLayout: React.FC = () => {
     const [showMenuConfirm, setShowMenuConfirm] = useState(false);
     const [showMenuDropdown, setShowMenuDropdown] = useState(false);
     const [showDragOverlay, setShowDragOverlay] = useState(false);
+    const [highScoreState, setHighScoreState] = useState<'checking' | 'entering' | 'done'>('done');
+    const [playerName, setPlayerName] = useState('');
     const isTouchDrag = useRef(false);
     const dropdownRef = useRef<HTMLDivElement>(null);
 
@@ -80,6 +83,25 @@ export const GameLayout: React.FC = () => {
             return () => document.removeEventListener('mousedown', handleClickOutside);
         }
     }, [showMenuDropdown]);
+
+    // Check for high score when game ends
+    useEffect(() => {
+        if (isGameOver) {
+            setHighScoreState('checking');
+            isHighScore(score, difficulty).then(isHigh => {
+                setHighScoreState(isHigh ? 'entering' : 'done');
+            });
+        } else {
+            setHighScoreState('done');
+            setPlayerName('');
+        }
+    }, [isGameOver, score]);
+
+    const handleHighScoreSubmit = async () => {
+        const name = playerName.trim() || 'Anonymous';
+        await addHighScore(name, score, difficulty);
+        setHighScoreState('done');
+    };
 
     // Initialize the game once
     useEffect(() => {
@@ -240,21 +262,50 @@ export const GameLayout: React.FC = () => {
                         {isGameOver && (
                             <div className="absolute inset-0 bg-slate-900/80 backdrop-blur-sm rounded-lg flex flex-col items-center justify-center z-10 transition-all duration-500 animate-in fade-in zoom-in-95">
                                 <h2 className="text-4xl font-bold text-red-400 mb-2 drop-shadow-md">Game Over</h2>
-                                <p className="text-lg text-slate-300 mb-6">Final Score: {score}</p>
-                                <div className="flex gap-4">
-                                    <button
-                                        onClick={() => initializeGame()}
-                                        className="px-6 py-3 bg-indigo-600 hover:bg-indigo-500 active:bg-indigo-700 text-white font-semibold rounded-md shadow-lg transition-colors"
-                                    >
-                                        Play Again
-                                    </button>
-                                    <button
-                                        onClick={() => returnToMenu()}
-                                        className="px-6 py-3 bg-slate-700 hover:bg-slate-600 active:bg-slate-800 text-white font-semibold rounded-md shadow-lg transition-colors"
-                                    >
-                                        Return to Menu
-                                    </button>
-                                </div>
+                                <p className="text-lg text-slate-300 mb-4">Final Score: {score}</p>
+
+                                {highScoreState === 'entering' && (
+                                    <div className="flex flex-col items-center gap-3 mb-6">
+                                        <p className="text-yellow-400 font-semibold text-sm">New High Score!</p>
+                                        <form
+                                            onSubmit={(e) => { e.preventDefault(); handleHighScoreSubmit(); }}
+                                            className="flex gap-2"
+                                        >
+                                            <input
+                                                type="text"
+                                                value={playerName}
+                                                onChange={(e) => setPlayerName(e.target.value)}
+                                                placeholder="Enter your name"
+                                                maxLength={16}
+                                                autoFocus
+                                                className="px-3 py-2 bg-slate-700 border border-slate-500 rounded-md text-white text-sm placeholder-slate-400 focus:outline-none focus:border-indigo-400 w-40"
+                                            />
+                                            <button
+                                                type="submit"
+                                                className="px-4 py-2 bg-yellow-500 hover:bg-yellow-400 active:bg-yellow-600 text-slate-900 font-semibold text-sm rounded-md transition-colors"
+                                            >
+                                                Save
+                                            </button>
+                                        </form>
+                                    </div>
+                                )}
+
+                                {highScoreState === 'done' && (
+                                    <div className="flex gap-4 mt-2">
+                                        <button
+                                            onClick={() => initializeGame()}
+                                            className="px-6 py-3 bg-indigo-600 hover:bg-indigo-500 active:bg-indigo-700 text-white font-semibold rounded-md shadow-lg transition-colors"
+                                        >
+                                            Play Again
+                                        </button>
+                                        <button
+                                            onClick={() => returnToMenu()}
+                                            className="px-6 py-3 bg-slate-700 hover:bg-slate-600 active:bg-slate-800 text-white font-semibold rounded-md shadow-lg transition-colors"
+                                        >
+                                            Return to Menu
+                                        </button>
+                                    </div>
+                                )}
                             </div>
                         )}
                     </div>

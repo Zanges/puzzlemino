@@ -1,8 +1,21 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { useGameStore } from '../../store/gameStore';
+import { getTopScores, clearAllScores, type HighScoreEntry } from '../../db/highScores';
 
 export const MainMenu: React.FC = () => {
     const { difficulty, setDifficulty, initializeGame } = useGameStore();
+    const [highScores, setHighScores] = useState<HighScoreEntry[]>([]);
+    const [showResetConfirm, setShowResetConfirm] = useState(false);
+
+    useEffect(() => {
+        getTopScores(difficulty).then(setHighScores);
+    }, [difficulty]);
+
+    const handleResetScores = async () => {
+        await clearAllScores();
+        setHighScores([]);
+        setShowResetConfirm(false);
+    };
 
     const handleStartGame = async () => {
         // Initialize the game with the chosen difficulty, which loads config and generates board
@@ -53,6 +66,66 @@ export const MainMenu: React.FC = () => {
                 >
                     Start Game
                 </button>
+
+                {/* High Scores */}
+                {highScores.length > 0 && (
+                    <div className="w-full flex flex-col gap-2">
+                        <div className="flex items-center justify-between px-1">
+                            <h2 className="text-slate-300 font-semibold tracking-wide text-sm uppercase">
+                                High Scores — <span className="capitalize">{difficulty}</span>
+                            </h2>
+                            <button
+                                onClick={() => setShowResetConfirm(true)}
+                                className="text-xs text-slate-500 hover:text-red-400 transition-colors"
+                            >
+                                Reset
+                            </button>
+                        </div>
+                        <div className="bg-slate-800/50 rounded-lg p-3">
+                            <table className="w-full text-sm">
+                                <thead>
+                                    <tr className="text-slate-500 text-xs uppercase">
+                                        <th className="text-left pb-2 w-8">#</th>
+                                        <th className="text-left pb-2">Name</th>
+                                        <th className="text-right pb-2">Score</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {highScores.map((entry, i) => (
+                                        <tr key={entry.id} className="text-slate-300">
+                                            <td className="py-1 text-slate-500">{i + 1}</td>
+                                            <td className="py-1">{entry.name}</td>
+                                            <td className="py-1 text-right font-mono text-white">{entry.score}</td>
+                                        </tr>
+                                    ))}
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                )}
+
+                {showResetConfirm && (
+                    <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50">
+                        <div className="bg-slate-800 border border-slate-600 rounded-xl p-6 mx-4 max-w-sm w-full shadow-2xl text-center">
+                            <h3 className="text-xl font-bold text-slate-100 mb-2">Reset Leaderboard?</h3>
+                            <p className="text-slate-400 mb-6">This will permanently delete all high scores across all difficulties.</p>
+                            <div className="flex gap-3 justify-center">
+                                <button
+                                    onClick={() => setShowResetConfirm(false)}
+                                    className="px-5 py-2 bg-slate-600 hover:bg-slate-500 active:bg-slate-700 text-white font-semibold rounded-md transition-colors"
+                                >
+                                    Cancel
+                                </button>
+                                <button
+                                    onClick={handleResetScores}
+                                    className="px-5 py-2 bg-red-600 hover:bg-red-500 active:bg-red-700 text-white font-semibold rounded-md transition-colors"
+                                >
+                                    Reset
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                )}
 
             </main>
 
