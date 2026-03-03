@@ -16,7 +16,7 @@ export interface MasterGameConfig {
 }
 
 export async function loadGameConfig(difficulty: string = 'normal'): Promise<GameConfig> {
-    const response = await fetch('/gameConfig.json');
+    const response = await fetch(import.meta.env.BASE_URL + 'gameConfig.json');
     if (!response.ok) {
         throw new Error('Failed to load game config');
     }
