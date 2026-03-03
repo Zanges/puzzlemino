@@ -13,7 +13,17 @@ import { useDndContext } from '@dnd-kit/core';
 
 export const Board: React.FC<BoardProps> = ({ activePiece }) => {
     const board = useGameStore(state => state.board);
+    const clearingCells = useGameStore(state => state.clearingCells);
     const { over } = useDndContext();
+
+    // Build a set for O(1) lookup of clearing cells
+    const clearingSet = React.useMemo(() => {
+        const s = new Set<string>();
+        for (const c of clearingCells) {
+            s.add(`${c.x},${c.y}`);
+        }
+        return s;
+    }, [clearingCells]);
 
     // Determine the current hovered coordinates, centering the piece on the cursor
     let hoveredX: number | null = null;
@@ -89,6 +99,8 @@ export const Board: React.FC<BoardProps> = ({ activePiece }) => {
                             }
                         }
 
+                        const isClearing = clearingSet.has(`${x},${y}`);
+
                         return (
                             <BoardCell
                                 key={`${x}-${y}`}
@@ -99,6 +111,7 @@ export const Board: React.FC<BoardProps> = ({ activePiece }) => {
                                 isPreview={isPreview}
                                 isInvalidPreview={isInvalidPreview}
                                 previewColor={previewColor}
+                                isClearing={isClearing}
                             />
                         );
                     })
@@ -116,10 +129,11 @@ interface BoardCellProps {
     isPreview: boolean;
     isInvalidPreview: boolean;
     previewColor: string | null;
+    isClearing: boolean;
 }
 
 const BoardCell: React.FC<BoardCellProps> = ({
-    x, y, isEmpty, colorId, isPreview, isInvalidPreview, previewColor
+    x, y, isEmpty, colorId, isPreview, isInvalidPreview, previewColor, isClearing
 }) => {
     const { setNodeRef } = useDroppable({
         id: `cell-${x}-${y}`,
@@ -133,8 +147,9 @@ const BoardCell: React.FC<BoardCellProps> = ({
             className={cn(
                 "rounded-sm",
                 isEmpty && !isPreview && !isInvalidPreview ? "bg-slate-700/40 border border-slate-600/30" : "",
-                !isEmpty ? colorId : "",
-                !isEmpty ? "shadow-sm border border-black/10" : "",
+                !isEmpty && !isClearing ? colorId : "",
+                !isEmpty && !isClearing ? "shadow-sm border border-black/10" : "",
+                isClearing ? `${colorId} animate-line-clear` : "",
                 isPreview ? `${previewColor} opacity-50 border-2 border-white/70` : "",
                 isInvalidPreview ? "bg-red-500/80" : ""
             )}

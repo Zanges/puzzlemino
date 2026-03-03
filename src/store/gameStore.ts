@@ -9,11 +9,18 @@ import { loadGameConfig } from '../config/configLoader';
 import { generateAllVariants } from '../utils/pieceUtils';
 import type { PieceVariantDef } from '../utils/pieceUtils';
 
+interface ClearingCell {
+    x: number;
+    y: number;
+    colorId: string | null;
+}
+
 interface GameStore extends GameState {
     isGameOver: boolean;
     configLoaded: boolean;
     allVariants: PieceVariantDef[];
     colorMap: Record<string, string>;
+    clearingCells: ClearingCell[];
 
     // Actions
     setAppState: (state: AppState) => void;
@@ -39,6 +46,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
     configLoaded: false,
     allVariants: [],
     colorMap: {},
+    clearingCells: [],
 
     setAppState: (state) => set({ appState: state }),
     setDifficulty: (diff) => set({ difficulty: diff }),
@@ -114,38 +122,39 @@ export const useGameStore = create<GameStore>((set, get) => ({
         }
 
         // 2. Place at the (possibly nudged) position
-        let nextBoard = placePieceOnBoard(state.board, piece, nudged.x, nudged.y);
+        const boardWithPiece = placePieceOnBoard(state.board, piece, nudged.x, nudged.y);
 
         // 3. Score (Base blocks)
         let blocksPlaced = 0;
         piece.matrix.forEach(row => row.forEach(val => { if (val === 1) blocksPlaced++; }));
         let pointsGained = blocksPlaced;
 
-        // 4. Line Clears
-        const { nextBoard: clearedBoard, linesCleared } = clearLines(nextBoard);
-        nextBoard = clearedBoard;
+        // 4. Detect line clears
+        const { nextBoard: clearedBoard, linesCleared, clearedCells } = clearLines(boardWithPiece);
 
         if (linesCleared > 0) {
             pointsGained += (linesCleared * 10);
-            // Bonus for multiple lines
             if (linesCleared > 1) {
-                pointsGained += (linesCleared * 5); // Simple combo bonus
+                pointsGained += (linesCleared * 5);
             }
+        }
+
+        // Board clear bonus: double total score if every cell is empty after clearing
+        const isBoardClear = linesCleared > 0 && clearedBoard.every(row => row.every(cell => cell.isEmpty));
+        let newScore = state.score + pointsGained;
+        if (isBoardClear) {
+            newScore *= 2;
         }
 
         // 5. Update Hand
         const nextHand = [...state.hand];
-        nextHand[pieceIndex] = null; // Remove piece from hand momentarily
+        nextHand[pieceIndex] = null;
 
         // 6. Refill Hand logic
-        // If hand is completely empty, refill it all at once
         const activePieces = nextHand.filter(p => p !== null);
         let nextBag = [...state.bag];
 
-        // Wait, Puzzlemino/1010 style usually refills the whole hand when it's completely empty.
-        // Let's implement that: if activePieces.length === 0, pull 3 new ones.
         if (activePieces.length === 0 && state.configLoaded) {
-            // Need base shapes to draw
             const baseShapeIds = Object.keys(state.colorMap);
             for (let i = 0; i < nextHand.length; i++) {
                 const { piece: newPiece, nextBag: newBag } = drawPiece(nextBag, baseShapeIds, state.allVariants, state.colorMap);
@@ -154,18 +163,44 @@ export const useGameStore = create<GameStore>((set, get) => ({
             }
         }
 
-        // 7. Game Over Check
-        const gameOver = isGameOver(nextBoard, nextHand);
+        if (linesCleared > 0) {
+            // Phase 1: Show board with piece placed, mark cells as clearing
+            const cellsWithColor = clearedCells.map(c => ({
+                x: c.x,
+                y: c.y,
+                colorId: boardWithPiece[c.y][c.x].colorId
+            }));
 
-        // 8. Commit state
-        set({
-            appState: gameOver ? 'gameover' : state.appState,
-            board: nextBoard,
-            hand: nextHand,
-            score: state.score + pointsGained,
-            bag: nextBag,
-            isGameOver: gameOver
-        });
+            set({
+                board: boardWithPiece,
+                hand: nextHand,
+                score: newScore,
+                bag: nextBag,
+                clearingCells: cellsWithColor
+            });
+
+            // Phase 2: After animation, clear the cells and check game over
+            setTimeout(() => {
+                const gameOver = isGameOver(clearedBoard, get().hand);
+                set({
+                    appState: gameOver ? 'gameover' : get().appState,
+                    board: clearedBoard,
+                    clearingCells: [],
+                    isGameOver: gameOver
+                });
+            }, 500);
+        } else {
+            // No lines to clear — commit immediately
+            const gameOver = isGameOver(boardWithPiece, nextHand);
+            set({
+                appState: gameOver ? 'gameover' : state.appState,
+                board: boardWithPiece,
+                hand: nextHand,
+                score: newScore,
+                bag: nextBag,
+                isGameOver: gameOver
+            });
+        }
 
         return true;
     }

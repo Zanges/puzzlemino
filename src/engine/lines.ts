@@ -1,8 +1,14 @@
 import type { BoardState } from '../types/game';
 
+export interface ClearedCoord {
+    x: number;
+    y: number;
+}
+
 export interface LineClearResult {
     nextBoard: BoardState;
     linesCleared: number;
+    clearedCells: ClearedCoord[];
 }
 
 /**
@@ -47,7 +53,17 @@ export function clearLines(board: BoardState): LineClearResult {
     const totalLines = fullRows.size + fullCols.size;
 
     if (totalLines === 0) {
-        return { nextBoard: board, linesCleared: 0 };
+        return { nextBoard: board, linesCleared: 0, clearedCells: [] };
+    }
+
+    // Collect cleared cell coordinates
+    const clearedCells: ClearedCoord[] = [];
+    for (let y = 0; y < height; y++) {
+        for (let x = 0; x < width; x++) {
+            if (fullRows.has(y) || fullCols.has(x)) {
+                clearedCells.push({ x, y });
+            }
+        }
     }
 
     const nextBoard = board.map((row, y) =>
@@ -59,5 +75,5 @@ export function clearLines(board: BoardState): LineClearResult {
         })
     );
 
-    return { nextBoard, linesCleared: totalLines };
+    return { nextBoard, linesCleared: totalLines, clearedCells };
 }

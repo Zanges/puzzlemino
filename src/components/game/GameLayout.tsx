@@ -26,9 +26,6 @@ function useViewportSize() {
     return size;
 }
 
-// Set to true to show the floating piece following the cursor while dragging
-const showDragOverlay = false;
-
 export const GameLayout: React.FC = () => {
     const { initializeGame, configLoaded, isGameOver, tryPlacePiece, score, returnToMenu } = useGameStore();
     const board = useGameStore(state => state.board);
@@ -65,7 +62,24 @@ export const GameLayout: React.FC = () => {
         return Math.max(16, Math.min(size, 48));
     }, [board, viewport, isLandscape]);
     const [activePiece, setActivePiece] = useState<PieceVariant | null>(null);
+    const [showMenuConfirm, setShowMenuConfirm] = useState(false);
+    const [showMenuDropdown, setShowMenuDropdown] = useState(false);
+    const [showDragOverlay, setShowDragOverlay] = useState(false);
     const isTouchDrag = useRef(false);
+    const dropdownRef = useRef<HTMLDivElement>(null);
+
+    // Close dropdown when clicking outside
+    useEffect(() => {
+        const handleClickOutside = (e: MouseEvent) => {
+            if (dropdownRef.current && !dropdownRef.current.contains(e.target as Node)) {
+                setShowMenuDropdown(false);
+            }
+        };
+        if (showMenuDropdown) {
+            document.addEventListener('mousedown', handleClickOutside);
+            return () => document.removeEventListener('mousedown', handleClickOutside);
+        }
+    }, [showMenuDropdown]);
 
     // Initialize the game once
     useEffect(() => {
@@ -162,9 +176,62 @@ export const GameLayout: React.FC = () => {
                 className="flex flex-col items-center justify-start h-[100dvh] bg-slate-900 text-slate-100 font-sans select-none overflow-hidden"
                 style={{ '--cell-size': `${cellSize}px` } as React.CSSProperties}
             >
-                <div className="py-1 text-lg md:text-2xl font-semibold text-slate-300">
-                    Score: <span className="text-white bg-slate-800 px-3 py-1 rounded-md">{score}</span>
+                <div className="py-1 flex items-center gap-3">
+                    <div className="relative" ref={dropdownRef}>
+                        <button
+                            onClick={() => setShowMenuDropdown(prev => !prev)}
+                            className="px-2 py-1 md:px-3 md:py-1 text-xs md:text-sm bg-slate-700 hover:bg-slate-600 active:bg-slate-800 text-slate-300 hover:text-white rounded-md transition-colors"
+                        >
+                            Settings
+                        </button>
+                        {showMenuDropdown && (
+                            <div className="absolute top-full left-0 mt-1 bg-slate-800 border border-slate-600 rounded-lg shadow-xl z-50 min-w-[180px] py-1">
+                                <button
+                                    onClick={() => { setShowMenuDropdown(false); setShowMenuConfirm(true); }}
+                                    className="w-full text-left px-4 py-2 text-sm text-slate-300 hover:bg-slate-700 hover:text-white transition-colors"
+                                >
+                                    Main Menu
+                                </button>
+                                <div className="border-t border-slate-700 my-1" />
+                                <button
+                                    onClick={() => setShowDragOverlay(prev => !prev)}
+                                    className="w-full text-left px-4 py-2 text-sm text-slate-300 hover:bg-slate-700 hover:text-white transition-colors flex items-center justify-between"
+                                >
+                                    <span>Drag Preview</span>
+                                    <span className={`w-8 h-4 rounded-full relative transition-colors ${showDragOverlay ? 'bg-indigo-500' : 'bg-slate-600'}`}>
+                                        <span className={`absolute top-0.5 w-3 h-3 rounded-full bg-white transition-transform ${showDragOverlay ? 'translate-x-4' : 'translate-x-0.5'}`} />
+                                    </span>
+                                </button>
+                            </div>
+                        )}
+                    </div>
+                    <div className="text-lg md:text-2xl font-semibold text-slate-300">
+                        Score: <span className="text-white bg-slate-800 px-3 py-1 rounded-md">{score}</span>
+                    </div>
                 </div>
+
+                {showMenuConfirm && (
+                    <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50">
+                        <div className="bg-slate-800 border border-slate-600 rounded-xl p-6 mx-4 max-w-sm w-full shadow-2xl text-center">
+                            <h3 className="text-xl font-bold text-slate-100 mb-2">Leave Game?</h3>
+                            <p className="text-slate-400 mb-6">Your current progress will be lost.</p>
+                            <div className="flex gap-3 justify-center">
+                                <button
+                                    onClick={() => setShowMenuConfirm(false)}
+                                    className="px-5 py-2 bg-slate-600 hover:bg-slate-500 active:bg-slate-700 text-white font-semibold rounded-md transition-colors"
+                                >
+                                    Cancel
+                                </button>
+                                <button
+                                    onClick={() => { setShowMenuConfirm(false); returnToMenu(); }}
+                                    className="px-5 py-2 bg-red-600 hover:bg-red-500 active:bg-red-700 text-white font-semibold rounded-md transition-colors"
+                                >
+                                    Leave
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                )}
 
                 <main className="flex flex-col landscape:flex-row md:flex-row items-center md:items-start justify-start landscape:justify-center md:justify-center w-full flex-1 perspective-1000">
                     <div className="relative">
