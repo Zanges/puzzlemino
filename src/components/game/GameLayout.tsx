@@ -7,7 +7,7 @@ import {
     MouseSensor,
     TouchSensor,
 } from '@dnd-kit/core';
-import type { DragStartEvent, DragEndEvent, Modifier } from '@dnd-kit/core';
+import type { DragStartEvent, Modifier } from '@dnd-kit/core';
 import { restrictToWindowEdges } from '@dnd-kit/modifiers';
 
 import { useGameStore } from '../../store/gameStore';
@@ -16,6 +16,7 @@ import { Hand } from './Hand';
 import { Piece } from './Piece';
 import type { PieceVariant } from '../../types/game';
 import { isHighScore, addHighScore } from '../../db/highScores';
+import { computeSnapPosition } from '../../utils/snapUtils';
 
 function useViewportSize() {
     const [size, setSize] = useState({ w: window.innerWidth, h: window.innerHeight });
@@ -70,6 +71,36 @@ export const GameLayout: React.FC = () => {
     const [playerName, setPlayerName] = useState('');
     const isTouchDrag = useRef(false);
     const dropdownRef = useRef<HTMLDivElement>(null);
+    const boardGridRef = useRef<HTMLDivElement>(null);
+    const pointerRef = useRef<{ x: number; y: number } | null>(null);
+    const [pointerPos, setPointerPos] = useState<{ x: number; y: number } | null>(null);
+
+    // Track pointer position during drag for pixel-based snap
+    useEffect(() => {
+        if (!activePiece) {
+            setPointerPos(null);
+            pointerRef.current = null;
+            return;
+        }
+        let rafId: number;
+        const handler = (e: PointerEvent) => {
+            const pos = { x: e.clientX, y: e.clientY };
+            pointerRef.current = pos;
+            cancelAnimationFrame(rafId);
+            rafId = requestAnimationFrame(() => setPointerPos(pos));
+        };
+        window.addEventListener('pointermove', handler);
+        return () => {
+            window.removeEventListener('pointermove', handler);
+            cancelAnimationFrame(rafId);
+        };
+    }, [activePiece]);
+
+    // Compute snap position from pointer + grid
+    const snapPosition = useMemo(() => {
+        if (!activePiece || !pointerPos || !boardGridRef.current) return null;
+        return computeSnapPosition(boardGridRef.current, pointerPos.x, pointerPos.y, activePiece, board);
+    }, [activePiece, pointerPos, board]);
 
     // Close dropdown when clicking outside
     useEffect(() => {
@@ -110,7 +141,7 @@ export const GameLayout: React.FC = () => {
         }
     }, [configLoaded, initializeGame]);
 
-    // Setup drag sensors. 
+    // Setup drag sensors.
     // MouseSensor for desktop. TouchSensor with delay for mobile (prevent accidental grabs when scrolling... though we disabled scrolling).
     const sensors = useSensors(
         useSensor(MouseSensor, {
@@ -127,28 +158,27 @@ export const GameLayout: React.FC = () => {
         const piece = active.data.current?.piece as PieceVariant;
         if (piece) {
             setActivePiece(piece);
+            // Initialize pointer position from the activator event
+            const e = event.activatorEvent;
+            if (e && 'clientX' in e) {
+                const pos = { x: (e as PointerEvent).clientX, y: (e as PointerEvent).clientY };
+                pointerRef.current = pos;
+                setPointerPos(pos);
+            }
         }
     };
 
-    const handleDragEnd = (event: DragEndEvent) => {
-        const { over } = event;
-
-        if (over && activePiece) {
-            const cellData = over.data.current as { x: number, y: number };
-
-            if (cellData) {
-                // Center-align: offset by the piece's center of mass
-                const matrix = activePiece.matrix;
-                let sumX = 0, sumY = 0, count = 0;
-                for (let py = 0; py < matrix.length; py++) {
-                    for (let px = 0; px < matrix[py].length; px++) {
-                        if (matrix[py][px] === 1) { sumX += px; sumY += py; count++; }
-                    }
-                }
-                const anchorX = cellData.x - Math.round(sumX / count);
-                const anchorY = cellData.y - Math.round(sumY / count);
-
-                tryPlacePiece(activePiece.id, anchorX, anchorY);
+    const handleDragEnd = () => {
+        if (activePiece && boardGridRef.current && pointerRef.current) {
+            const snap = computeSnapPosition(
+                boardGridRef.current,
+                pointerRef.current.x,
+                pointerRef.current.y,
+                activePiece,
+                board
+            );
+            if (snap?.valid) {
+                tryPlacePiece(activePiece.id, snap.x, snap.y);
             }
         }
 
@@ -257,7 +287,7 @@ export const GameLayout: React.FC = () => {
 
                 <main className="flex flex-col landscape:flex-row md:flex-row items-center md:items-start justify-start landscape:justify-center md:justify-center w-full flex-1 perspective-1000">
                     <div className="relative">
-                        <Board activePiece={activePiece} />
+                        <Board activePiece={activePiece} snapPosition={snapPosition} gridRef={boardGridRef} />
 
                         {isGameOver && (
                             <div className="absolute inset-0 bg-slate-900/80 backdrop-blur-sm rounded-lg flex flex-col items-center justify-center z-10 transition-all duration-500 animate-in fade-in zoom-in-95">

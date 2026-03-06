@@ -2,19 +2,17 @@ import React from 'react';
 import { useDroppable } from '@dnd-kit/core';
 import { useGameStore } from '../../store/gameStore';
 import { cn } from '../../lib/utils';
-import { nudgePlacement } from '../../engine/validator';
 import type { PieceVariant } from '../../types/game';
 
 interface BoardProps {
     activePiece: PieceVariant | null;
+    snapPosition: { x: number; y: number; valid: boolean } | null;
+    gridRef: React.RefObject<HTMLDivElement | null>;
 }
 
-import { useDndContext } from '@dnd-kit/core';
-
-export const Board: React.FC<BoardProps> = ({ activePiece }) => {
+export const Board: React.FC<BoardProps> = ({ activePiece, snapPosition, gridRef }) => {
     const board = useGameStore(state => state.board);
     const clearingCells = useGameStore(state => state.clearingCells);
-    const { over } = useDndContext();
 
     // Build a set for O(1) lookup of clearing cells
     const clearingSet = React.useMemo(() => {
@@ -25,48 +23,14 @@ export const Board: React.FC<BoardProps> = ({ activePiece }) => {
         return s;
     }, [clearingCells]);
 
-    // Determine the current hovered coordinates, centering the piece on the cursor
-    let hoveredX: number | null = null;
-    let hoveredY: number | null = null;
-    let isValidHover = false;
-
-    if (over && activePiece) {
-        const cellData = over.data.current as { x: number, y: number };
-        if (cellData) {
-            // Compute the center of filled cells in the piece matrix
-            const matrix = activePiece.matrix;
-            let sumX = 0, sumY = 0, count = 0;
-            for (let py = 0; py < matrix.length; py++) {
-                for (let px = 0; px < matrix[py].length; px++) {
-                    if (matrix[py][px] === 1) {
-                        sumX += px;
-                        sumY += py;
-                        count++;
-                    }
-                }
-            }
-            // Offset so the piece center aligns with the hovered cell
-            const offsetX = Math.round(sumX / count);
-            const offsetY = Math.round(sumY / count);
-            const anchorX = cellData.x - offsetX;
-            const anchorY = cellData.y - offsetY;
-
-            const nudged = nudgePlacement(board, activePiece, anchorX, anchorY);
-            if (nudged) {
-                hoveredX = nudged.x;
-                hoveredY = nudged.y;
-                isValidHover = true;
-            } else {
-                hoveredX = anchorX;
-                hoveredY = anchorY;
-                isValidHover = false;
-            }
-        }
-    }
+    const hoveredX = snapPosition?.x ?? null;
+    const hoveredY = snapPosition?.y ?? null;
+    const isValidHover = snapPosition?.valid ?? false;
 
     return (
         <div className="bg-slate-800 p-[2px] md:p-3 rounded-lg shadow-xl inline-block touch-none select-none">
             <div
+                ref={gridRef}
                 className="grid gap-[1px] md:gap-1 bg-slate-700/50 p-[2px] md:p-2 rounded-md"
                 style={{
                     gridTemplateRows: `repeat(${board.length}, minmax(0, 1fr))`,
