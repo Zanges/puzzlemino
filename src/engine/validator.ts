@@ -39,7 +39,7 @@ export function nudgePlacement(
     piece: PieceVariant,
     startX: number,
     startY: number,
-    maxNudge: number = 3
+    maxNudge: number = 1
 ): { x: number; y: number } | null {
     // If it already fits, return as-is
     if (canPlacePiece(board, piece, startX, startY)) {
