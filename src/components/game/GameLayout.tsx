@@ -35,33 +35,69 @@ export const GameLayout: React.FC = () => {
 
     const isLandscape = viewport.w > viewport.h;
 
-    const cellSize = useMemo(() => {
+    const { cellSize, handCellSize } = useMemo(() => {
         const rows = board.length || 10;
         const cols = board[0]?.length || 10;
-        const gap = 1; // gap in px between cells
-        // Board chrome: 2px outer padding + 2px inner padding per side = 8px total per axis
-        const boardChrome = 8;
+        // Responsive values: mobile vs md (768px+)
+        const isMd = viewport.w >= 768;
+        const gap = isMd ? 4 : 1;
+        // Board: outer p-[2px]/md:p-3 + inner p-[2px]/md:p-2, both sides
+        const boardChrome = isMd ? (12 + 8) * 2 : (2 + 2) * 2;
         // Score bar height
         const scoreH = 32;
+        // Hand chrome: padding + gaps + borders
+        const handChrome = isMd ? 40 : 16;
+        // Minimum hand cell size
+        const minHandCell = 10;
 
-        let size: number;
+        // Given a cell size, compute total board dimensions
+        const boardW = (c: number) => c * cols + (cols - 1) * gap + boardChrome;
+        const boardH = (c: number) => c * rows + (rows - 1) * gap + boardChrome;
+
+        let boardCell: number;
+        let handCell: number;
+
         if (isLandscape) {
-            const availableH = viewport.h - scoreH - boardChrome - 28;
-            const availableW = viewport.w * 0.65 - boardChrome;
-            size = Math.min(availableH / rows, availableW / cols);
+            // Landscape: board on left, hand on right
+            // Board must fit in available height
+            const availableH = viewport.h - scoreH;
+            const cellFromH = (availableH - boardChrome - (rows - 1) * gap) / rows;
+            // Board can take up to 75% of width
+            const maxBoardW = viewport.w * 0.75;
+            const cellFromW = (maxBoardW - boardChrome - (cols - 1) * gap) / cols;
+            boardCell = Math.max(16, Math.min(cellFromH, cellFromW));
+
+            // Hand fits in remaining width
+            const remainingW = viewport.w - boardW(boardCell) - 16; // 16 for ml-4
+            handCell = Math.min(boardCell, Math.max(minHandCell, (remainingW - handChrome) / 5));
         } else {
-            const availableW = viewport.w - boardChrome;
-            // Reserve space for hand (tallest piece is 4 cells × ~28px + chrome)
-            const handH = 140;
-            const availableH = viewport.h - scoreH - boardChrome - handH;
-            size = Math.min(availableW / cols, availableH / rows);
+            // Portrait: board on top, hand below
+            // Start with full-width board
+            const availableW = viewport.w;
+            boardCell = (availableW - boardChrome - (cols - 1) * gap) / cols;
+
+            // Check if hand fits in remaining vertical space
+            const remainingH = viewport.h - scoreH - boardH(boardCell);
+            // Hand pieces: largest is 5 rows tall in a horizontal layout
+            const maxHandRows = 5;
+            handCell = Math.max(minHandCell, (remainingH - handChrome) / maxHandRows);
+
+            // If hand would be too cramped, shrink board to give hand more room
+            if (handCell < minHandCell + 4) {
+                handCell = minHandCell + 4;
+                const handH = handCell * maxHandRows + handChrome;
+                const availableH = viewport.h - scoreH - handH;
+                const cellFromH = (availableH - boardChrome - (rows - 1) * gap) / rows;
+                const cellFromW = (availableW - boardChrome - (cols - 1) * gap) / cols;
+                boardCell = Math.min(cellFromH, cellFromW);
+            }
+
+            // Cap hand size to board cell size
+            handCell = Math.min(handCell, boardCell);
+            boardCell = Math.max(16, boardCell);
         }
 
-        // Account for gaps between cells
-        size = size - gap;
-
-        // Clamp between reasonable bounds
-        return Math.max(16, Math.min(size, 48));
+        return { cellSize: boardCell, handCellSize: Math.floor(handCell) };
     }, [board, viewport, isLandscape]);
     const [activePiece, setActivePiece] = useState<PieceVariant | null>(null);
     const [showMenuConfirm, setShowMenuConfirm] = useState(false);
@@ -226,7 +262,7 @@ export const GameLayout: React.FC = () => {
         >
             <div
                 className="flex flex-col items-center justify-start h-[100dvh] bg-slate-900 text-slate-100 font-sans select-none overflow-hidden"
-                style={{ '--cell-size': `${cellSize}px` } as React.CSSProperties}
+                style={{ '--cell-size': `${cellSize}px`, '--hand-cell-size': `${handCellSize}px` } as React.CSSProperties}
             >
                 <div className="py-1 flex items-center gap-3">
                     <div className="relative" ref={dropdownRef}>
