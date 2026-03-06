@@ -31,7 +31,7 @@ export const Board: React.FC<BoardProps> = ({ activePiece, snapPosition, gridRef
         <div className="bg-slate-800 p-[2px] md:p-3 rounded-lg shadow-xl inline-block touch-none select-none">
             <div
                 ref={gridRef}
-                className="grid gap-[1px] md:gap-1 bg-slate-700/50 p-[2px] md:p-2 rounded-md"
+                className="grid gap-[1px] md:gap-1 bg-slate-400/30 p-[2px] md:p-2 rounded-md"
                 style={{
                     gridTemplateRows: `repeat(${board.length}, minmax(0, 1fr))`,
                     gridTemplateColumns: `repeat(${board[0]?.length || 0}, minmax(0, 1fr))`
@@ -110,7 +110,7 @@ const BoardCell: React.FC<BoardCellProps> = ({
             style={{ width: 'var(--cell-size)', height: 'var(--cell-size)' }}
             className={cn(
                 "rounded-sm",
-                isEmpty && !isPreview && !isInvalidPreview ? "bg-slate-700/40 border border-slate-600/30" : "",
+                isEmpty && !isPreview && !isInvalidPreview ? "bg-slate-800/80 border border-slate-700/20" : "",
                 !isEmpty && !isClearing ? colorId : "",
                 !isEmpty && !isClearing ? "shadow-sm border border-black/10" : "",
                 isClearing ? `${colorId} animate-line-clear` : "",
